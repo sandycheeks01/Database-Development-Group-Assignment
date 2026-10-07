@@ -1,0 +1,56 @@
+section B d
+
+-- (d) Procedure: insert book with computed retail
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PROCEDURE p_line(p_label VARCHAR2 DEFAULT NULL) AS
+BEGIN DBMS_OUTPUT.PUT_LINE(RPAD(NVL(p_label,'-'),72,'-')); END;
+/
+
+CREATE OR REPLACE PROCEDURE proc_insert_book
+(
+  p_isbn      IN book.book_isbn%TYPE,
+  p_title     IN book.book_title%TYPE,
+  p_pubdate   IN book.book_pubdate%TYPE,
+  p_pub_id    IN book.pub_id%TYPE,
+  p_cost      IN book.book_cost%TYPE,
+  p_category  IN book.book_category%TYPE
+) AS
+  v_avg_cost  NUMBER;
+  v_retail    NUMBER;
+BEGIN
+  SELECT NVL(AVG(book_cost),0) INTO v_avg_cost FROM book;
+  v_retail := ROUND(p_cost * 1.105 + v_avg_cost * 0.045, 2);
+
+  INSERT INTO book (book_isbn, book_title, book_pubdate, pub_id,
+                    book_cost, book_retail, book_category)
+  VALUES (p_isbn, p_title, p_pubdate, p_pub_id, p_cost, v_retail, p_category);
+
+  DBMS_OUTPUT.PUT_LINE('Inserted with retail = '||TO_CHAR(v_retail,'FM$999G999G990D00'));
+EXCEPTION
+  WHEN DUP_VAL_ON_INDEX THEN
+    RAISE_APPLICATION_ERROR(-20010, 'ISBN exists: '||p_isbn);
+  WHEN NO_DATA_FOUND THEN
+    RAISE_APPLICATION_ERROR(-20011, 'Reference missing (publisher?)');
+  WHEN OTHERS THEN
+    RAISE_APPLICATION_ERROR(-20012, 'proc_insert_book: '||SQLERRM);
+END;
+/
+
+BEGIN p_line('(d) insert new COMPUTER book'); END;
+/
+BEGIN
+  proc_insert_book(
+    p_isbn     => '7777777777',
+    p_title    => 'ALGORITHMS IN THE WILD',
+    p_pubdate  => DATE '2025-04-30',
+    p_pub_id   => 3,
+    p_cost     => 42.50,
+    p_category => 'COMPUTER'
+  );
+  COMMIT;
+END;
+/
+SELECT book_isbn, book_title, book_cost, book_retail, book_category
+  FROM book
+ WHERE book_isbn = '7777777777';

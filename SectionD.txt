@@ -1,0 +1,54 @@
+db.hobbits.drop()  
+load('C:/Users/21009870/Documents/158337/assignment2/partb/NoSQL.txt')
+db.hobbits.countDocuments()     
+db.hobbits.find().limit(3).pretty()
+
+------------------------------------------------------------------------------------
+
+Map Reduce: gender-wise average weight
+
+var map = function () {
+  emit(this.gender, { total: this.weight, count: 1 });
+};
+
+var reduce = function (key, values) {
+  var acc = { total: 0, count: 0 };
+  values.forEach(function (v) {
+    acc.total += v.total;
+    acc.count += v.count;
+  });
+  return acc;
+};
+
+var finalize = function (key, reduced) {
+  return { avgWeight: reduced.total / reduced.count, count: reduced.count };
+};
+
+db.hobbits.mapReduce(map, reduce, {
+  out: "gender_weight_stats",
+  finalize: finalize
+});
+
+// show MR result
+db.gender_weight_stats.find().pretty()
+---------------------------------------------------------------------------------
+
+Aggregation pipeline
+
+db.hobbits.aggregate([
+  { $group: {
+      _id: "$gender",
+      avgWeight: { $avg: "$weight" },
+      count: { $sum: 1 }
+  }},
+  { $project: {
+      gender: "$_id",
+      avgWeight: { $round: ["$avgWeight", 2] },
+      count: 1,
+      _id: 0
+  }},
+  { $sort: { gender: 1 } }
+]).toArray()
+
+----------------------------------------------------------------------------------
+

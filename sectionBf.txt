@@ -1,0 +1,22 @@
+section B f
+
+-- (f) Money-format function and usage
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE FUNCTION money_fmt(p_amount NUMBER)
+  RETURN VARCHAR2
+IS
+BEGIN
+  RETURN TO_CHAR(p_amount, 'FM$999G999G990D00');
+END;
+/
+
+COLUMN TITLE  FORMAT A34
+COLUMN COST   FORMAT A14
+COLUMN RETAIL FORMAT A14
+
+SELECT book_title AS title,
+       money_fmt(book_cost)   AS cost,
+       money_fmt(book_retail) AS retail
+  FROM book
+ ORDER BY book_title;

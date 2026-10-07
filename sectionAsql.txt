@@ -1,0 +1,188 @@
+a) Write a query that lists both customer and author details (only their ids, first and
+last names). Provide suitable headings for the merged list. 
+
+SELECT 
+    CAST(Cust_Num AS VARCHAR2(10)) AS Person_ID,
+    Cust_FName AS First_Name,
+    Cust_LName AS Last_Name
+FROM Customer
+
+UNION
+
+SELECT 
+    Author_ID AS Person_ID,
+    Author_FName AS First_Name,
+    Author_LName AS Last_Name
+FROM Author
+
+ORDER BY Last_Name, First_Name;
+
+b) Write a query that will list the books with the price difference (between retail and
+cost) of $20 or more. Display your results in the decreasing order of the price
+difference. 
+
+SELECT 
+    Book_ISBN,
+    Book_Title,
+    Book_Cost,
+    Book_Retail,
+    (Book_Retail - Book_Cost) AS Price_Difference
+FROM Book
+WHERE (Book_Retail - Book_Cost) >= 20.00
+ORDER BY Price_Difference DESC;
+
+c) Write a query that will list books that were published in any of the two
+years 1999 or 2001 but also have retail prices of $35 or less. Display the
+year of publication values under the column titled Publication Year. Show the
+query results in the increasing order of the publication year and decreasing
+retail price. 
+
+SELECT 
+    Book_ISBN,
+    Book_Title,
+    EXTRACT(YEAR FROM Book_PubDate) AS "Publication Year",
+    Book_PubDate,
+    Book_Retail,
+    Book_Category
+FROM Book
+WHERE EXTRACT(YEAR FROM Book_PubDate) IN (1999, 2001)
+  AND Book_Retail <= 35.00
+ORDER BY EXTRACT(YEAR FROM Book_PubDate) ASC, Book_Retail DESC;
+
+d) Write a query that will list publishers (with details such as name) and total
+number of books published by them. Include only those publishers that have
+2 or more books published and display the output in the decreasing order of
+total number of publications. 
+
+SELECT 
+    p.Pub_ID,
+    p.Pub_Name,
+    p.Pub_Contact,
+    p.Pub_Phone,
+    COUNT(b.Book_ISBN) AS Total_Books_Published
+FROM Publisher p
+JOIN Book b ON p.Pub_ID = b.Pub_ID
+GROUP BY p.Pub_ID, p.Pub_Name, p.Pub_Contact, p.Pub_Phone
+HAVING COUNT(b.Book_ISBN) >= 2
+ORDER BY Total_Books_Published DESC;
+
+e) Write a query to list books that have multiple authors. Also, display the number
+of authors who wrote the book.
+
+SELECT 
+    b.Book_ISBN,
+    b.Book_Title,
+    b.Book_Category,
+    b.Book_Retail,
+    COUNT(ba.Author_ID) AS Number_of_Authors
+FROM Book b
+JOIN BookAuthor ba ON b.Book_ISBN = ba.Book_ISBN
+GROUP BY b.Book_ISBN, b.Book_Title, b.Book_Category, b.Book_Retail
+HAVING COUNT(ba.Author_ID) > 1
+ORDER BY Number_of_Authors DESC, b.Book_Title;
+
+f) Write a query that will list books from the ‘computer’ category along with
+other details such as author(s), publisher, etc. List the book authors in a single
+row and the query should be able to accommodate all the casing-variations of
+the category values in the database. 
+
+SELECT 
+    b.Book_ISBN,
+    b.Book_Title,
+    b.Book_Category,
+    b.Book_PubDate,
+    b.Book_Cost,
+    b.Book_Retail,
+    p.Pub_Name AS Publisher_Name,
+    p.Pub_Contact AS Publisher_Contact,
+    p.Pub_Phone AS Publisher_Phone,
+    LISTAGG(a.Author_FName || ' ' || a.Author_LName, ', ') 
+        WITHIN GROUP (ORDER BY a.Author_LName, a.Author_FName) AS Authors
+FROM Book b
+JOIN Publisher p ON b.Pub_ID = p.Pub_ID
+JOIN BookAuthor ba ON b.Book_ISBN = ba.Book_ISBN
+JOIN Author a ON ba.Author_ID = a.Author_ID
+WHERE UPPER(b.Book_Category) = 'COMPUTER'
+GROUP BY b.Book_ISBN, b.Book_Title, b.Book_Category, b.Book_PubDate, 
+         b.Book_Cost, b.Book_Retail, p.Pub_Name, p.Pub_Contact, p.Pub_Phone
+ORDER BY b.Book_Title;
+
+g) Write a query that will list the customer who has ordered the greatest number of items (two copies of the same book will be counted as two items) to date. If there is more than one customer, then your query should list all those customers.
+
+SELECT 
+    c.Cust_Num,
+    c.Cust_FName,
+    c.Cust_LName,
+    c.Cust_City,
+    c.Cust_State,
+    SUM(boi.BOI_Qty) AS Total_Items_Ordered
+FROM Customer c
+JOIN BookOrder bo ON c.Cust_Num = bo.Cust_Num
+JOIN BookOrderItem boi ON bo.BO_OrderNum = boi.BO_OrderNum
+GROUP BY c.Cust_Num, c.Cust_FName, c.Cust_LName, c.Cust_City, c.Cust_State
+HAVING SUM(boi.BOI_Qty) = (
+    SELECT MAX(customer_totals.Total_Items)
+    FROM (
+        SELECT c2.Cust_Num, SUM(boi2.BOI_Qty) AS Total_Items
+        FROM Customer c2
+        JOIN BookOrder bo2 ON c2.Cust_Num = bo2.Cust_Num
+        JOIN BookOrderItem boi2 ON bo2.BO_OrderNum = boi2.BO_OrderNum
+        GROUP BY c2.Cust_Num
+    ) customer_totals
+)
+ORDER BY c.Cust_LName, c.Cust_FName;
+
+h) Write a query that will display the customer that referred to the greatest
+number of customers. Again, like g) there can be more than one customer.
+(3.5 marks)
+
+SELECT 
+    referrer.Cust_Num,
+    referrer.Cust_FName,
+    referrer.Cust_LName,
+    referrer.Cust_City,
+    referrer.Cust_State,
+    COUNT(referred.Cust_Num) AS Number_of_Referrals
+FROM Customer referrer
+JOIN Customer referred ON referrer.Cust_Num = referred.Cust_Referred_by
+GROUP BY referrer.Cust_Num, referrer.Cust_FName, referrer.Cust_LName, 
+         referrer.Cust_City, referrer.Cust_State
+HAVING COUNT(referred.Cust_Num) = (
+    SELECT MAX(referral_counts.Total_Referrals)
+    FROM (
+        SELECT r.Cust_Num, COUNT(rf.Cust_Num) AS Total_Referrals
+        FROM Customer r
+        JOIN Customer rf ON r.Cust_Num = rf.Cust_Referred_by
+        GROUP BY r.Cust_Num
+    ) referral_counts
+)
+ORDER BY referrer.Cust_LName, referrer.Cust_FName;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

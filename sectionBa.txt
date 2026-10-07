@@ -1,0 +1,118 @@
+Section B
+
+a) 
+
+-- (a) Business trigger: maintain order summaries
+SET SERVEROUTPUT ON;
+
+-- Utility
+CREATE OR REPLACE PROCEDURE p_line(p_label VARCHAR2 DEFAULT NULL) AS
+BEGIN DBMS_OUTPUT.PUT_LINE(RPAD(NVL(p_label,'-'),72,'-')); END;
+/
+
+-- Fresh table each run
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE ORDER_SUMMARY PURGE';
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+
+CREATE TABLE ORDER_SUMMARY (
+  BO_OrderNum        NUMBER(4) PRIMARY KEY,
+  ItemCount          NUMBER(6)    NOT NULL,
+  BooksCount         NUMBER(10)   NOT NULL,
+  MerchandiseTotal   NUMBER(12,2) NOT NULL,
+  Last_Refreshed     DATE         NOT NULL
+);
+
+CREATE OR REPLACE PROCEDURE p_refresh_order_summary(p_order NUMBER) AS
+  v_item_count  NUMBER;
+  v_books_count NUMBER;
+  v_merch_total NUMBER;
+BEGIN
+  SELECT COUNT(*),
+         NVL(SUM(boi.boi_qty),0),
+         NVL(SUM(boi.boi_qty * b.book_retail),0)
+    INTO v_item_count, v_books_count, v_merch_total
+    FROM BOOKORDERITEM boi
+    JOIN BOOK b ON b.book_isbn = boi.book_isbn
+   WHERE boi.bo_ordernum = p_order;
+
+  IF v_item_count = 0 THEN
+    DELETE FROM ORDER_SUMMARY WHERE bo_ordernum = p_order;
+  ELSE
+    MERGE INTO ORDER_SUMMARY s
+    USING (SELECT p_order bo_ordernum,
+                  v_item_count itemcount,
+                  v_books_count bookscount,
+                  v_merch_total merch
+             FROM dual) x
+       ON (s.bo_ordernum = x.bo_ordernum)
+     WHEN MATCHED THEN
+       UPDATE SET s.itemcount = x.itemcount,
+                  s.bookscount = x.bookscount,
+                  s.merchandisetotal = x.merch,
+                  s.last_refreshed = SYSDATE
+     WHEN NOT MATCHED THEN
+       INSERT (bo_ordernum, itemcount, bookscount, merchandisetotal, last_refreshed)
+       VALUES (x.bo_ordernum, x.itemcount, x.bookscount, x.merch, SYSDATE);
+  END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER trg_boi_order_summary
+FOR INSERT OR UPDATE OR DELETE ON BOOKORDERITEM
+COMPOUND TRIGGER
+  TYPE t_num_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+  g_orders t_num_tab; g_n PLS_INTEGER := 0;
+  PROCEDURE add_order(p_order NUMBER) IS
+  BEGIN IF p_order IS NOT NULL THEN g_n := g_n + 1; g_orders(g_n) := p_order; END IF; END;
+
+  AFTER EACH ROW IS
+  BEGIN
+    IF INSERTING THEN add_order(:NEW.bo_ordernum);
+    ELSIF UPDATING THEN
+      add_order(:NEW.bo_ordernum);
+      IF :OLD.bo_ordernum <> :NEW.bo_ordernum THEN add_order(:OLD.bo_ordernum); END IF;
+    ELSIF DELETING THEN add_order(:OLD.bo_ordernum);
+    END IF;
+  END AFTER EACH ROW;
+
+  AFTER STATEMENT IS
+  BEGIN
+    IF g_n > 0 THEN
+      FOR i IN 1..g_n LOOP
+        IF g_orders.EXISTS(i) THEN p_refresh_order_summary(g_orders(i)); END IF;
+      END LOOP;
+    END IF;
+  END AFTER STATEMENT;
+END;
+/
+
+BEGIN p_line('(a) BEFORE: ORDER 1007'); END;
+/
+SELECT * FROM ORDER_SUMMARY WHERE bo_ordernum = 1007;
+
+BEGIN p_line('(a) INSERT line to order 1007'); END;
+/
+INSERT INTO BOOKORDERITEM (BO_OrderNum, BOI_ItemNum, Book_ISBN, BOI_Qty)
+VALUES (1007, 5, '0299282519', 2);
+COMMIT;
+
+BEGIN p_line('(a) AFTER insert: ORDER 1007'); END;
+/
+SELECT * FROM ORDER_SUMMARY WHERE bo_ordernum = 1007;
+
+BEGIN p_line('(a) UPDATE qty on order 1007 item 1'); END;
+/
+UPDATE BOOKORDERITEM SET BOI_Qty = BOI_Qty + 1
+ WHERE BO_OrderNum = 1007 AND BOI_ItemNum = 1;
+COMMIT;
+
+SELECT * FROM ORDER_SUMMARY WHERE bo_ordernum = 1007;
+
+BEGIN p_line('(a) DELETE one line from order 1007'); END;
+/
+DELETE FROM BOOKORDERITEM WHERE BO_OrderNum = 1007 AND BOI_ItemNum = 2;
+COMMIT;
+
+SELECT * FROM ORDER_SUMMARY WHERE bo_ordernum = 1007;
+

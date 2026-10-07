@@ -1,0 +1,58 @@
+Section B c
+
+-- (c) Trigger: limit to 3 authors for FITNESS books
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PROCEDURE p_line(p_label VARCHAR2 DEFAULT NULL) AS
+BEGIN DBMS_OUTPUT.PUT_LINE(RPAD(NVL(p_label,'-'),72,'-')); END;
+/
+
+CREATE OR REPLACE TRIGGER trg_fitness_author_limit
+BEFORE INSERT OR UPDATE ON bookauthor
+FOR EACH ROW
+DECLARE
+  v_cat  book.book_category%TYPE;
+  v_cnt  NUMBER;
+  v_isbn book.book_isbn%TYPE := :NEW.book_isbn;
+BEGIN
+  SELECT book_category INTO v_cat FROM book WHERE book_isbn = v_isbn;
+
+  IF UPPER(v_cat) = 'FITNESS' THEN
+    IF INSERTING THEN
+      SELECT COUNT(*) INTO v_cnt FROM bookauthor WHERE book_isbn = v_isbn;
+      IF v_cnt >= 3 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'FITNESS book '||v_isbn||' already has 3 authors');
+      END IF;
+    ELSIF UPDATING THEN
+      SELECT COUNT(*) INTO v_cnt
+        FROM bookauthor
+       WHERE book_isbn = v_isbn
+         AND author_id <> NVL(:OLD.author_id, '§§NONE§§');
+      IF v_cnt >= 3 AND :NEW.author_id <> :OLD.author_id THEN
+        RAISE_APPLICATION_ERROR(-20003, 'FITNESS book '||v_isbn||' cannot exceed 3 authors');
+      END IF;
+    END IF;
+  END IF;
+END;
+/
+
+BEGIN p_line('(c) BEFORE: authors for FITNESS 1059831198'); END;
+/
+SELECT * FROM BOOKAUTHOR WHERE book_isbn = '1059831198';
+
+BEGIN p_line('(c) add 3rd author (allowed)'); END;
+/
+INSERT INTO BOOKAUTHOR (book_isbn, author_id) VALUES ('1059831198','B100');
+COMMIT;
+SELECT * FROM BOOKAUTHOR WHERE book_isbn = '1059831198';
+
+BEGIN p_line('(c) attempt 4th author (should fail)'); END;
+/
+BEGIN
+  INSERT INTO BOOKAUTHOR (book_isbn, author_id) VALUES ('1059831198','R100');
+  COMMIT;
+EXCEPTION WHEN OTHERS THEN
+  DBMS_OUTPUT.PUT_LINE('(c) error: '||SQLERRM);
+  ROLLBACK;
+END;
+/

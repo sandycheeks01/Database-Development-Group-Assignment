@@ -1,0 +1,46 @@
+Section B b
+
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PROCEDURE p_line(p_label VARCHAR2 DEFAULT NULL) AS
+BEGIN DBMS_OUTPUT.PUT_LINE(RPAD(NVL(p_label,'-'),72,'-')); END;
+/
+
+CREATE OR REPLACE TRIGGER trg_book_retail_cap
+BEFORE UPDATE OF book_retail ON book
+FOR EACH ROW
+DECLARE v_limit NUMBER := :OLD.book_retail * 1.225;
+BEGIN
+  IF :NEW.book_retail > v_limit THEN
+    RAISE_APPLICATION_ERROR(-20001,
+      'Retail increase exceeds 22.5% for ISBN '||:OLD.book_isbn);
+  END IF;
+END;
+/
+
+DECLARE
+  v_old NUMBER; v_ok NUMBER; v_bad NUMBER;
+BEGIN
+  SELECT book_retail INTO v_old FROM book WHERE book_isbn = '3437212490';
+  v_ok  := ROUND(v_old * 1.20, 2);
+  v_bad := ROUND(v_old * 1.30, 2);
+
+  p_line('(b) BEFORE: retail for 3437212490 = '||v_old);
+
+  p_line('(b) valid increase should succeed');
+  UPDATE book SET book_retail = v_ok WHERE book_isbn = '3437212490';
+  COMMIT;
+
+  p_line('(b) invalid increase should fail');
+  BEGIN
+    UPDATE book SET book_retail = v_bad WHERE book_isbn = '3437212490';
+    COMMIT;
+  EXCEPTION WHEN OTHERS THEN
+    p_line('(b) error: '||SQLERRM);
+    ROLLBACK;
+  END;
+
+  UPDATE book SET book_retail = v_old WHERE book_isbn = '3437212490';
+  COMMIT;
+END;
+/

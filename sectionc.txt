@@ -1,0 +1,54 @@
+using System;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using SectionC_LINQ.Models;
+
+static class Pretty
+{
+    public static void Table<T>(string title, IQueryable<T> data)
+    {
+        Console.WriteLine();
+        Console.WriteLine(title);
+        Console.WriteLine(new string('=', title.Length));
+        foreach (var row in data.ToList()) Console.WriteLine(row);
+    }
+}
+
+using var db = new BookscriptContext();
+
+ (a) Books with retail >= $25
+var qa = db.Set<Book>()
+    .Where(b => b.book_retail >= 25m)
+    .OrderBy(b => b.book_title)
+    .Select(b => new { Title = b.book_title, Retail = b.book_retail });
+
+ (b) Titles containing "WAY"
+var qb = db.Set<Book>()
+    .Where(b => EF.Functions.Like(b.book_title, "%WAY%"))
+    .OrderBy(b => b.book_title)
+    .Select(b => new { Title = b.book_title, Retail = b.book_retail });
+
+(c) Category, Title, Publisher
+var qc = db.Set<Book>()
+    .Join(db.Set<Publisher>(), b => b.pub_id, p => p.pub_id,
+        (b, p) => new { Category = b.book_category, Title = b.book_title, Publisher = p.pub_name })
+    .OrderBy(x => x.Category).ThenBy(x => x.Title);
+
+ (d) Book count by Publisher (by PubId)
+var qd = db.Set<Book>()
+    .GroupBy(b => b.pub_id)
+    .OrderBy(g => g.Key)
+    .Select(g => new { PubId = g.Key, Count = g.Count() });
+
+ (e) Book count by Category
+var qe = db.Set<Book>()
+    .GroupBy(b => b.book_category)
+    .OrderBy(g => g.Key)
+    .Select(g => new { Category = g.Key, Count = g.Count() });
+
+Print
+Pretty.Table("C(a) Books with Retail ≥ $25", qa);
+Pretty.Table("C(b) Titles containing \"WAY\"", qb);
+Pretty.Table("C(c) Category, Title, and Publisher", qc);
+Pretty.Table("C(d) Book count by Publisher (by PubId)", qd);
+Pretty.Table("C(e) Book count by Category", qe);

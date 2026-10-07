@@ -1,0 +1,70 @@
+Section B e
+
+-- (e) Cursor report for COMPUTER books
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PROCEDURE p_line(p_label VARCHAR2 DEFAULT NULL) AS
+BEGIN DBMS_OUTPUT.PUT_LINE(RPAD(NVL(p_label,'-'),72,'-')); END;
+/
+
+CREATE OR REPLACE PROCEDURE report_computer_books AS
+  CURSOR c_books IS
+    SELECT b.book_isbn, b.book_title, b.book_cost, b.book_retail
+      FROM book b
+     WHERE UPPER(b.book_category) = 'COMPUTER'
+     ORDER BY b.book_title;
+
+  v_isbn    book.book_isbn%TYPE;
+  v_title   book.book_title%TYPE;
+  v_cost    book.book_cost%TYPE;
+  v_retail  book.book_retail%TYPE;
+  v_authors VARCHAR2(4000);
+  v_count   PLS_INTEGER := 0;
+  v_total_cost   NUMBER := 0;
+  v_total_retail NUMBER := 0;
+BEGIN
+  p_line('COMPUTER BOOKS REPORT');
+  DBMS_OUTPUT.PUT_LINE(RPAD('TITLE',38)||'  '||
+                       RPAD('COST',12)||'  '||
+                       RPAD('RETAIL',12)||'  AUTHORS');
+  p_line;
+
+  OPEN c_books;
+  LOOP
+    FETCH c_books INTO v_isbn, v_title, v_cost, v_retail;
+    EXIT WHEN c_books%NOTFOUND;
+
+    BEGIN
+      SELECT LISTAGG(a.author_fname||' '||a.author_lname, ', ')
+             WITHIN GROUP (ORDER BY a.author_lname, a.author_fname)
+        INTO v_authors
+        FROM bookauthor ba
+        JOIN author a ON a.author_id = ba.author_id
+       WHERE ba.book_isbn = v_isbn;
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+      v_authors := NULL;
+    END;
+
+    DBMS_OUTPUT.PUT_LINE(RPAD(v_title,38)||'  '||
+                         TO_CHAR(v_cost,  'FM$999G999G990D00')||'  '||
+                         TO_CHAR(v_retail,'FM$999G999G990D00')||'  '||
+                         NVL(v_authors,'<no authors>'));
+
+    v_count := v_count + 1;
+    v_total_cost := v_total_cost + v_cost;
+    v_total_retail := v_total_retail + v_retail;
+  END LOOP;
+  CLOSE c_books;
+
+  p_line;
+  DBMS_OUTPUT.PUT_LINE('Books listed: '||v_count);
+  DBMS_OUTPUT.PUT_LINE('Total cost:   '||TO_CHAR(v_total_cost,  'FM$999G999G990D00'));
+  DBMS_OUTPUT.PUT_LINE('Total retail: '||TO_CHAR(v_total_retail,'FM$999G999G990D00'));
+  p_line('END OF REPORT');
+END;
+/
+
+BEGIN
+  report_computer_books;
+END;
+/
